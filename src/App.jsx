@@ -6,30 +6,7 @@ import StandingsTab from "./tabs/StandingsTab.jsx";
 import { useLiveGames } from "./hooks/useLiveGames.js";
 import { TEAM_META, NBA_DRAFT_LOTTERY, NBA_DRAFT } from "./constants.js";
 
-function argTime(isoUtc) {
-  try {
-    return new Date(isoUtc).toLocaleString("en-US", {
-      timeZone: "America/Argentina/Buenos_Aires",
-      month: "short", day: "numeric",
-      hour: "numeric", minute: "2-digit", hour12: true,
-    });
-  } catch { return null; }
-}
-
-const SEED_GAMES = [
-  { id: "s1", status: "inprogress", away: "MIN", awayName: "Timberwolves", awaySeed: 6, awayScore: 72,
-    home: "SAS", homeName: "Spurs", homeSeed: 2, homeScore: 69, quarter: 4, clock: "12:00",
-    gameTime: argTime("2026-05-05T01:30:00Z"), title: "WC Semis · G1" },
-  { id: "s2", status: "scheduled", away: "CLE", awayName: "Cavaliers", awaySeed: 4, awayProb: 42.4,
-    home: "DET", homeName: "Pistons", homeSeed: 1, homeProb: 57.6,
-    gameTime: argTime("2026-05-05T23:00:00Z"), title: "EC Semis · G1" },
-  { id: "s3", status: "scheduled", away: "LAL", awayName: "Lakers", awaySeed: 4, awayProb: 9.1,
-    home: "OKC", homeName: "Thunder", homeSeed: 1, homeProb: 90.9,
-    gameTime: argTime("2026-05-06T00:30:00Z"), title: "WC Semis · G1" },
-  { id: "s4", status: "closed", away: "PHI", awayName: "76ers", awaySeed: 7, awayScore: 98,
-    home: "NYK", homeName: "Knicks", homeSeed: 3, homeScore: 137,
-    gameTime: argTime("2026-05-05T00:00:00Z"), title: "EC Semis · G1" },
-];
+const SEED_GAMES = [];
 
 const TABS = [
   { id: "today",     label: "Today",     icon: "🏀" },
