@@ -11,79 +11,91 @@ function argTime(isoUtc) {
   } catch { return null; }
 }
 
-// Map balldontlie team abbreviations to our display format
-const ABBR_MAP = {
-  "GSW": "GSW", "LAL": "LAL", "LAC": "LAC", "PHX": "PHX",
-  "SAC": "SAC", "DEN": "DEN", "MIN": "MIN", "OKC": "OKC",
-  "POR": "POR", "UTA": "UTA", "DAL": "DAL", "HOU": "HOU",
-  "MEM": "MEM", "NOP": "NOP", "SAS": "SAS", "MIA": "MIA",
-  "ATL": "ATL", "CHA": "CHA", "CHI": "CHI", "CLE": "CLE",
-  "DET": "DET", "IND": "IND", "MIL": "MIL", "NYK": "NYK",
-  "ORL": "ORL", "PHI": "PHI", "BKN": "BKN", "BOS": "BOS",
-  "TOR": "TOR", "WAS": "WAS",
-};
-
 function mapStatus(s) {
   if (!s) return "scheduled";
-  const u = s.toUpperCase();
-  if (u === "IN PROGRESS" || u === "LIVE" || u.includes("PROGRESS")) return "inprogress";
-  if (u === "FINAL" || u === "CLOSED" || u === "COMPLETE") return "closed";
+  // NBA API: 1 = scheduled, 2 = live, 3 = final
+  if (s === 2 || s === "2") return "inprogress";
+  if (s === 3 || s === "3") return "closed";
+  if (typeof s === "string") {
+    const u = s.toUpperCase();
+    if (u.includes("PROGRESS") || u === "LIVE") return "inprogress";
+    if (u === "FINAL" || u === "CLOSED") return "closed";
+  }
   return "scheduled";
 }
 
-async function fetchTodayGames() {
-  // Get today's date in Argentina timezone
-  const argNow = new Date(Date.now());
-  const argDate = argNow.toLocaleDateString("en-CA", {
-    timeZone: "America/Argentina/Buenos_Aires"
-  }); // "2026-05-05"
-
-  // Also fetch yesterday in case late games haven't flipped yet
-  const yesterday = new Date(argNow - 86400000).toLocaleDateString("en-CA", {
-    timeZone: "America/Argentina/Buenos_Aires"
+async function fetchFromNBA() {
+  // NBA's official live scoreboard — no key needed, works from browsers
+  const url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json";
+  const res = await fetch(url, {
+    headers: { "Accept": "application/json" }
   });
-
-  const urls = [
-    `https://api.balldontlie.io/v1/games?dates[]=${argDate}&per_page=20`,
-    `https://api.balldontlie.io/v1/games?dates[]=${yesterday}&per_page=20`,
-  ];
-
-  const results = await Promise.allSettled(urls.map(u => fetch(u).then(r => r.json())));
-
-  const games = [];
-  for (const r of results) {
-    if (r.status === "fulfilled" && r.value?.data) {
-      games.push(...r.value.data);
-    }
-  }
-
-  if (games.length === 0) return null;
+  if (!res.ok) throw new Error(`NBA API ${res.status}`);
+  const data = await res.json();
+  const games = data?.scoreboard?.games || [];
 
   return games.map(g => {
-    const homeAbbr = ABBR_MAP[g.home_team?.abbreviation] || g.home_team?.abbreviation || "HOM";
-    const awayAbbr = ABBR_MAP[g.visitor_team?.abbreviation] || g.visitor_team?.abbreviation || "AWY";
-    const status   = mapStatus(g.status);
-    const isLive   = status === "inprogress";
-    const isFinal  = status === "closed";
+    const status    = mapStatus(g.gameStatus);
+    const isLive    = status === "inprogress";
+    const isFinal   = status === "closed";
+    const homeTeam  = g.homeTeam || {};
+    const awayTeam  = g.awayTeam || {};
 
     return {
-      id:        String(g.id),
+      id:        String(g.gameId || Math.random()),
       status,
-      home:      homeAbbr,
-      away:      awayAbbr,
-      homeName:  g.home_team?.full_name    || homeAbbr,
-      awayName:  g.visitor_team?.full_name || awayAbbr,
+      home:      homeTeam.teamTricode || "HOM",
+      away:      awayTeam.teamTricode || "AWY",
+      homeName:  homeTeam.teamName    || homeTeam.teamTricode || "Home",
+      awayName:  awayTeam.teamName    || awayTeam.teamTricode || "Away",
       homeSeed:  null,
       awaySeed:  null,
-      homeScore: isFinal || isLive ? g.home_team_score : null,
-      awayScore: isFinal || isLive ? g.visitor_team_score : null,
+      homeScore: (isLive || isFinal) ? homeTeam.score : null,
+      awayScore: (isLive || isFinal) ? awayTeam.score : null,
       homeProb:  null,
       awayProb:  null,
+      quarter:   g.period || null,
+      clock:     g.gameClock || null,
+      gameTime:  argTime(g.gameTimeUTC),
+      title:     g.seriesText || (g.ifNecessary ? "If Necessary" : "Playoffs"),
+      startTime: g.gameTimeUTC || null,
+    };
+  });
+}
+
+async function fetchFromProxy() {
+  // Fallback: allorigins proxy to bypass CORS if NBA CDN blocks direct access
+  const target = encodeURIComponent(
+    "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+  );
+  const res = await fetch(`https://api.allorigins.win/get?url=${target}`);
+  if (!res.ok) throw new Error("Proxy failed");
+  const wrapper = await res.json();
+  const data    = JSON.parse(wrapper.contents);
+  const games   = data?.scoreboard?.games || [];
+
+  return games.map(g => {
+    const status   = mapStatus(g.gameStatus);
+    const isLive   = status === "inprogress";
+    const isFinal  = status === "closed";
+    const homeTeam = g.homeTeam || {};
+    const awayTeam = g.awayTeam || {};
+    return {
+      id:        String(g.gameId || Math.random()),
+      status,
+      home:      homeTeam.teamTricode || "HOM",
+      away:      awayTeam.teamTricode || "AWY",
+      homeName:  homeTeam.teamName    || homeTeam.teamTricode || "Home",
+      awayName:  awayTeam.teamName    || awayTeam.teamTricode || "Away",
+      homeSeed:  null, awaySeed:  null,
+      homeScore: (isLive || isFinal) ? homeTeam.score : null,
+      awayScore: (isLive || isFinal) ? awayTeam.score : null,
+      homeProb:  null, awayProb:  null,
       quarter:   g.period   || null,
-      clock:     g.time     || null,
-      gameTime:  argTime(g.datetime || g.date),
-      title:     g.postseason ? "Playoffs" : "Regular Season",
-      startTime: g.datetime || g.date || null,
+      clock:     g.gameClock || null,
+      gameTime:  argTime(g.gameTimeUTC),
+      title:     g.seriesText || "Playoffs",
+      startTime: g.gameTimeUTC || null,
     };
   });
 }
@@ -96,28 +108,31 @@ export function useLiveGames(seedGames) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const live = await fetchTodayGames();
+      // Try NBA CDN directly first, then proxy fallback
+      let live = null;
+      try {
+        live = await fetchFromNBA();
+      } catch {
+        live = await fetchFromProxy();
+      }
+
       if (live && live.length > 0) {
-        // Sort: live first, scheduled next, final last
         const order = { inprogress: 0, scheduled: 1, closed: 2 };
         live.sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
         setGames(live);
         setUpdated(new Date());
       }
-      // If API returns empty (off-season etc), keep seed games
+      // If no games today (off-season), keep seed data showing
     } catch (e) {
-      console.warn("balldontlie fetch failed:", e.message);
-      // Keep seed games on failure
+      console.warn("All NBA fetches failed, keeping seed data:", e.message);
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
     refresh();
-    // Auto-refresh every 60 seconds when a game is live
-    const interval = setInterval(() => {
-      refresh();
-    }, 60000);
+    // Auto-refresh every 60s
+    const interval = setInterval(refresh, 60000);
     return () => clearInterval(interval);
   }, [refresh]);
 
