@@ -20,8 +20,8 @@ export const TEAM_COLORS = {
 };
 
 // Key NBA dates 2026
-export const NBA_DRAFT_LOTTERY = new Date("2026-05-12T20:00:00");
-export const NBA_DRAFT          = new Date("2026-06-25T19:00:00");
+export const NBA_DRAFT_LOTTERY = new Date("2026-05-10T20:00:00");
+export const NBA_DRAFT          = new Date("2026-06-23T19:00:00");
 
 export const STATIC_SERIES = [
   { title: "EC Semis · NYK vs PHI", round: 2, status: "inprogress", t1: "NYK", t1r: 1, t2: "PHI", t2r: 0 },
