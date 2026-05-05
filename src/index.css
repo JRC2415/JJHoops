@@ -1,0 +1,72 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --orange:    #E8621A;
+  --orange-lt: #F2874A;
+  --ink:       #1A0F00;
+  --ink-soft:  #3D2B10;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  font-family: 'Barlow', sans-serif;
+  font-size: 17px;
+  color: var(--ink);
+  overflow-x: hidden;
+}
+
+/* Hardwood floor — sheerer: white overlay raised to 0.55 opacity */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px, transparent 58px,
+      rgba(0,0,0,0.05) 58px, rgba(0,0,0,0.05) 60px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      transparent 0px, transparent 28px,
+      rgba(0,0,0,0.03) 28px, rgba(0,0,0,0.03) 30px
+    ),
+    linear-gradient(
+      160deg,
+      #D4944A 0%, #C8893A 15%, #BE7E2E 28%,
+      #D49040 38%, #C07828 50%, #CA8835 60%,
+      #B8722A 72%, #D09040 85%, #C48232 100%
+    );
+}
+
+/* Heavy white wash — this is what makes it sheer */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: rgba(255, 250, 240, 0.55);
+  pointer-events: none;
+}
+
+/* Glass cards — more opaque now that background is lighter */
+.glass {
+  background: rgba(255, 250, 240, 0.82);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  border: 1px solid rgba(200, 137, 58, 0.28);
+  box-shadow: 0 2px 16px rgba(100, 50, 0, 0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+}
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: rgba(200,137,58,0.08); }
+::-webkit-scrollbar-thumb { background: rgba(200,137,58,0.35); border-radius: 3px; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+@keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+.animate-fadeup { animation: fadeUp 0.35s ease both; }
