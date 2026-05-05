@@ -1,4 +1,4 @@
-# 🏀 HoopsHQ
+# 🏀 JJHoops
 
 Personal NBA dashboard tracking the Chicago Bulls, LA Lakers, and Denver Nuggets.
 
