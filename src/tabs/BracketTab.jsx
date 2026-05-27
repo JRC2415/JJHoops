@@ -2,7 +2,14 @@ import { useState, useEffect } from "react";
 import TeamBadge from '../components/TeamBadge.jsx';
 import { MY_TEAMS, TEAM_COLORS } from '../constants.js';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ESPN uses "SA" but we use "SAS" — normalize here
+const ABBR_FIX = { "SA": "SAS", "GS": "GSW", "NY": "NYK", "NO": "NOP", "PHO": "PHX", "CHA": "CHA" };
+function fixAbbr(a) {
+  if (!a) return null;
+  const up = a.toUpperCase();
+  return ABBR_FIX[up] || up;
+}
+
 function argTime(isoUtc) {
   if (!isoUtc) return null;
   try {
@@ -15,93 +22,105 @@ function argTime(isoUtc) {
 }
 
 function statusLabel(s) {
-  if (s === "inprogress" || s === "STATUS_IN_PROGRESS") return { text: "● LIVE",     color: "#E8621A" };
-  if (s === "closed"     || s === "STATUS_FINAL")       return { text: "✓ FINAL",    color: "#16a34a" };
-  return                                                        { text: "○ UPCOMING", color: "#8B7355" };
+  if (!s) return { text: "○ UPCOMING", color: "#8B7355" };
+  const u = s.toUpperCase();
+  if (u.includes("PROGRESS") || u === "IN_PROGRESS") return { text: "● LIVE",     color: "#E8621A" };
+  if (u.includes("FINAL")    || u === "CLOSED")      return { text: "✓ FINAL",    color: "#16a34a" };
+  return                                                     { text: "○ UPCOMING", color: "#8B7355" };
 }
 
-// Safe team abbreviation — never crashes on TBD or unknown
-function safeAbbr(abbr) {
-  if (!abbr || abbr === "TBD" || abbr.length > 5) return null;
-  return abbr.toUpperCase();
+// ESPN round label from notes or competition type
+function getRoundLabel(event) {
+  const note = event.competitions?.[0]?.notes?.[0]?.headline || "";
+  if (note) return note; // e.g. "West Finals - Game 6"
+  const type = event.competitions?.[0]?.type?.abbreviation || "";
+  if (type === "FINAL" || type === "CHAMP") return "NBA Finals";
+  if (type === "CONF")  return "Conference Finals";
+  if (type === "SEMI")  return "Conference Semifinals";
+  return "First Round";
 }
 
-// ── Parse ESPN playoff series into our shape ─────────────────────────────────
-function parseSeries(data) {
-  // Try playoff-series endpoint first
-  let series = data?.series || data?.children?.flatMap(c => c.series || []) || [];
+function getRoundNumber(event) {
+  const label = getRoundLabel(event).toLowerCase();
+  if (label.includes("nba final") || label.includes("champ")) return 4;
+  if (label.includes("conf") && label.includes("final"))      return 3;
+  if (label.includes("semi"))                                  return 2;
+  return 1;
+}
 
-  // Fallback: build series from scoreboard events
-  if (!series.length && data?.scoreboard?.events) {
-    // Group events by series description
-    const map = {};
-    for (const e of data.scoreboard.events) {
-      const key = e.seriesSummary?.series?.id || e.id;
-      if (!map[key]) map[key] = { events: [], summary: e.seriesSummary };
-      map[key].events.push(e);
-    }
-    series = Object.values(map).map(g => ({
-      _fromScoreboard: true,
-      summary: g.summary,
-      events: g.events,
-    }));
-  }
+// Parse ESPN scoreboard events into series cards
+function parseFromScoreboard(data) {
+  const events = data?.scoreboard?.events || [];
+  if (!events.length) return null;
 
-  if (!series.length) return null;
+  // Group by series ID to deduplicate (multiple games same series)
+  const seriesMap = {};
 
-  const result = [];
+  for (const event of events) {
+    const comp       = event.competitions?.[0];
+    if (!comp) continue;
+    const seriesData = comp.series;
+    if (!seriesData) continue;
 
-  for (const s of series) {
-    try {
-      // ESPN playoff-series shape
-      const competitors = s.competitors || s.participants || [];
-      const t1raw = competitors[0]?.team?.abbreviation || competitors[0]?.abbreviation || competitors[0]?.team;
-      const t2raw = competitors[1]?.team?.abbreviation || competitors[1]?.abbreviation || competitors[1]?.team;
-      const t1 = safeAbbr(t1raw);
-      const t2 = safeAbbr(t2raw);
+    const competitors = seriesData.competitors || [];
+    const t1raw = comp.competitors?.find(c => c.homeAway === "home")?.team?.abbreviation;
+    const t2raw = comp.competitors?.find(c => c.homeAway === "away")?.team?.abbreviation;
+    const t1 = fixAbbr(t1raw);
+    const t2 = fixAbbr(t2raw);
+    if (!t1 || !t2) continue;
 
-      // Skip if we can't identify both teams yet (TBD matchups)
-      if (!t1 || !t2) continue;
+    // Use competitor IDs to build a stable series key
+    const ids = [comp.competitors[0]?.id, comp.competitors[1]?.id].sort().join("-");
 
-      const t1wins = competitors[0]?.wins ?? competitors[0]?.record ?? 0;
-      const t2wins = competitors[1]?.wins ?? competitors[1]?.record ?? 0;
-      const status = s.status?.type?.name || s.status || "scheduled";
-      const roundNum = s.round?.number || s.roundNumber || 1;
-      const roundNames = { 1: "First Round", 2: "Conference Semifinals", 3: "Conference Finals", 4: "NBA Finals" };
-      const conf = s.conference?.abbreviation || s.title?.toLowerCase().includes("east") ? "EC" : "WC";
+    if (!seriesMap[ids]) {
+      const homeComp = competitors.find(c => c.id === comp.competitors[0]?.id);
+      const awayComp = competitors.find(c => c.id === comp.competitors[1]?.id);
+      const t1wins = homeComp?.wins ?? 0;
+      const t2wins = awayComp?.wins ?? 0;
+      const status  = comp.status?.type?.name || "STATUS_SCHEDULED";
+      const roundNum = getRoundNumber(event);
+      const label    = getRoundLabel(event).split(" - ")[0]; // "West Finals" not "West Finals - Game 6"
 
-      const winner = (status === "closed" || status === "STATUS_FINAL")
+      // Is the whole series done?
+      const seriesDone = seriesData.completed === true;
+      const winner = seriesDone
         ? (t1wins > t2wins ? t1 : t2wins > t1wins ? t2 : null)
         : null;
 
-      const nextGame = s.nextEvent?.[0];
-      const nextTime = nextGame ? argTime(nextGame.date) : null;
+      // Next game time — if this event is upcoming, use its time
+      const isUpcoming = status === "STATUS_SCHEDULED";
+      const nextTime   = isUpcoming ? argTime(event.date) : null;
+      const seriesSummary = seriesData.summary || "";
 
-      result.push({
-        id:       s.id || `${t1}-${t2}`,
-        round:    roundNum,
-        label:    s.title || `${roundNames[roundNum] || "Round " + roundNum}`,
-        status:   status === "STATUS_IN_PROGRESS" ? "inprogress" : status === "STATUS_FINAL" ? "closed" : status,
+      seriesMap[ids] = {
+        id: ids, round: roundNum, label,
+        status: seriesDone ? "closed" : status.includes("PROGRESS") ? "inprogress" : "scheduled",
         t1, t2,
         t1wins: Number(t1wins),
         t2wins: Number(t2wins),
         winner,
         nextTime,
-      });
-    } catch { continue; }
+        summary: seriesSummary,
+      };
+    } else {
+      // Update with latest game time if scheduled
+      const status = comp.status?.type?.name || "";
+      if (status === "STATUS_SCHEDULED") {
+        seriesMap[ids].nextTime = argTime(event.date);
+      }
+    }
   }
 
-  // Sort by round descending (Finals first)
+  const result = Object.values(seriesMap);
   result.sort((a, b) => b.round - a.round);
   return result.length ? result : null;
 }
 
-// ── Components ───────────────────────────────────────────────────────────────
 function SeriesCard({ s, big }) {
-  const sl     = statusLabel(s.status);
-  const c1     = TEAM_COLORS[s.t1] || "#8B5E1A";
-  const c2     = TEAM_COLORS[s.t2] || "#8B5E1A";
-  const isMe   = MY_TEAMS.includes(s.t1) || MY_TEAMS.includes(s.t2);
+  const sl   = statusLabel(s.status);
+  const c1   = TEAM_COLORS[s.t1] || "#8B5E1A";
+  const c2   = TEAM_COLORS[s.t2] || "#8B5E1A";
+  const isMe = MY_TEAMS.includes(s.t1) || MY_TEAMS.includes(s.t2);
 
   return (
     <div className="glass" style={{
@@ -109,9 +128,10 @@ function SeriesCard({ s, big }) {
       border: isMe ? `1.5px solid ${c1}50` : "1px solid rgba(200,137,58,0.2)",
       marginBottom: 8,
     }}>
-      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, color: "#8B7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10, display: "flex", gap: 8, alignItems: "center" }}>
+      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, color: "#8B7355", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span>{s.label}</span>
         <span style={{ color: sl.color, fontWeight: 700 }}>{sl.text}</span>
+        {s.summary && <span style={{ color: "#8B7355", marginLeft: "auto" }}>{s.summary}</span>}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: big ? 24 : 16 }}>
@@ -132,7 +152,7 @@ function SeriesCard({ s, big }) {
 
       {s.nextTime && s.status !== "closed" && (
         <div style={{ textAlign: "center", marginTop: 8, fontFamily: "'Barlow Condensed', sans-serif", fontSize: 12, color: "#E8621A", fontWeight: 600 }}>
-          Next: {s.nextTime} ARG
+          Next game: {s.nextTime} ARG
         </div>
       )}
       {isMe && (
@@ -144,7 +164,6 @@ function SeriesCard({ s, big }) {
   );
 }
 
-// ── Main tab ─────────────────────────────────────────────────────────────────
 export default function BracketTab() {
   const [series,      setSeries]      = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -157,36 +176,30 @@ export default function BracketTab() {
       setError(null);
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch("/api/bracket", { signal: controller.signal });
+        const timeout    = setTimeout(() => controller.abort(), 8000);
+        const res        = await fetch("/api/bracket", { signal: controller.signal });
         clearTimeout(timeout);
         if (!res.ok) throw new Error(`API ${res.status}`);
-        const data = await res.json();
-        const parsed = parseSeries(data);
+        const data   = await res.json();
+        const parsed = parseFromScoreboard(data);
         if (parsed) {
           setSeries(parsed);
           setLastUpdated(new Date());
         } else {
-          setError("No playoff data available right now");
+          setError("no-data");
         }
       } catch (e) {
-        setError(e.name === "AbortError" ? "Request timed out" : e.message);
+        setError(e.name === "AbortError" ? "timeout" : e.message);
       }
       setLoading(false);
     }
     load();
   }, []);
 
-  // Group by round
-  const finals    = series.filter(s => s.round === 4);
+  const finals     = series.filter(s => s.round === 4);
   const confFinals = series.filter(s => s.round === 3);
-  const semis     = series.filter(s => s.round === 2);
-  const first     = series.filter(s => s.round === 1);
-
-  // Off-season: no series found
-  const playoffsOver = !loading && !error && series.length > 0 &&
-    series.every(s => s.status === "closed") &&
-    finals.length > 0 && finals[0].winner;
+  const semis      = series.filter(s => s.round === 2);
+  const first      = series.filter(s => s.round === 1);
 
   if (loading) return (
     <div className="glass" style={{ borderRadius: 14, padding: 32, textAlign: "center" }}>
@@ -194,32 +207,20 @@ export default function BracketTab() {
     </div>
   );
 
-  if (error) return (
+  if (error || series.length === 0) return (
     <div className="glass" style={{ borderRadius: 14, padding: 32, textAlign: "center" }}>
       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14, color: "#8B7355" }}>
-        {error.includes("No playoff") ? "No active playoff bracket right now. Check back when the playoffs begin!" : `Could not load bracket: ${error}`}
+        No active playoff bracket right now. Check back when the playoffs begin!
       </div>
     </div>
   );
 
-  if (playoffsOver) return (
-    <div className="glass" style={{ borderRadius: 14, padding: 32, textAlign: "center" }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>🏆</div>
-      <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, color: "#E8621A", letterSpacing: 1 }}>
-        {finals[0].winner} are NBA Champions!
-      </div>
-      <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14, color: "#6b5c45", marginTop: 8 }}>
-        The bracket will return next season.
-      </div>
-    </div>
-  );
-
-  const Section = ({ label, children }) => children?.length ? (
+  const Section = ({ label, items }) => items.length === 0 ? null : (
     <>
       <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11, color: "#6b5c45", letterSpacing: 2, textTransform: "uppercase", margin: "12px 0 4px" }}>{label}</div>
-      {children}
+      {items.map(s => <SeriesCard key={s.id} s={s} />)}
     </>
-  ) : null;
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -229,9 +230,9 @@ export default function BracketTab() {
           {finals.map(s => <SeriesCard key={s.id} s={s} big />)}
         </>
       )}
-      <Section label="Conference Finals">{confFinals.map(s => <SeriesCard key={s.id} s={s} />)}</Section>
-      <Section label="Conference Semifinals">{semis.map(s => <SeriesCard key={s.id} s={s} />)}</Section>
-      <Section label="First Round">{first.map(s => <SeriesCard key={s.id} s={s} />)}</Section>
+      <Section label="Conference Finals"   items={confFinals} />
+      <Section label="Conference Semifinals" items={semis} />
+      <Section label="First Round"         items={first} />
 
       {lastUpdated && (
         <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, color: "#8B7355", textAlign: "center", marginTop: 12 }}>
