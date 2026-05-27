@@ -1,97 +1,112 @@
+import { useState, useEffect } from "react";
 import TeamBadge from '../components/TeamBadge.jsx';
 import { TEAM_META, TEAM_COLORS } from '../constants.js';
 
-const TEAM_CONTEXT = {
-  CHI: {
-    status: "Not in Playoffs",
-    statusColor: "#CE1141",
-    summary: "The Bulls did not qualify for the 2025–26 NBA Playoffs. They finished 12th in the East at 33–49. Check back next season.",
-    stats: [
-      { label: "Conference", val: "Eastern" },
-      { label: "Fin. Record", val: "33–49" },
-      { label: "Conference Rank", val: "#12 East" },
-      { label: "Status", val: "Off-season" },
-    ],
-  },
-  LAL: {
-    status: "Conference Semifinals · vs OKC",
-    statusColor: "#FDB927",
-    summary: "Lakers beat HOU 4–2 in Round 1. Now face the #1 seed OKC Thunder — big underdogs but anything can happen in the playoffs.",
-    stats: [
-      { label: "Seed",      val: "#4 West"       },
-      { label: "Series",    val: "0–0 vs OKC"    },
-      { label: "Next Game", val: "May 5 @ OKC"   },
-      { label: "Win Prob",  val: "9.1%"          },
-    ],
-  },
-  DEN: {
-    status: "Eliminated · Round 1",
-    statusColor: "#FEC524",
-    summary: "Denver fell to the Minnesota Timberwolves 2–4 in Round 1. Jokić played well but the Wolves were relentless. Back next year.",
-    stats: [
-      { label: "Seed",      val: "#3 West"   },
-      { label: "R1 Series", val: "L 2–4"     },
-      { label: "Opponent",  val: "Minnesota" },
-      { label: "Status",    val: "Eliminated"},
-    ],
-  },
-};
+function timeAgo(isoString) {
+  if (!isoString) return "";
+  const diff = Math.floor((Date.now() - new Date(isoString)) / 60000);
+  if (diff < 60)   return `${diff}m ago`;
+  if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+  return `${Math.floor(diff / 1440)}d ago`;
+}
+
+function NewsItem({ article }) {
+  return (
+    <a href={article.link || "#"} target="_blank" rel="noopener noreferrer" style={{
+      display: "block", padding: "10px 12px", borderRadius: 8,
+      background: "rgba(200,137,58,0.08)", border: "1px solid rgba(200,137,58,0.15)",
+      textDecoration: "none", marginBottom: 6,
+    }}>
+      <div style={{
+        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15,
+        fontWeight: 700, color: "#3D2B10", lineHeight: 1.3, marginBottom: 3,
+      }}>
+        {article.headline}
+      </div>
+      {article.description && (
+        <div style={{
+          fontFamily: "'Barlow', sans-serif", fontSize: 12,
+          color: "#6b5c45", lineHeight: 1.4,
+          display: "-webkit-box", WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>
+          {article.description}
+        </div>
+      )}
+      <div style={{
+        fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11,
+        color: "#8B7355", marginTop: 4,
+      }}>
+        {timeAgo(article.published)} · ESPN
+      </div>
+    </a>
+  );
+}
+
+function TeamCard({ abbr, news, loading }) {
+  const meta  = TEAM_META[abbr];
+  const color = TEAM_COLORS[abbr] || meta.color;
+  return (
+    <div className="glass" style={{
+      borderRadius: 14, padding: 16, overflow: "hidden",
+      position: "relative", border: `1.5px solid ${color}40`,
+      boxShadow: `0 0 20px ${color}15`, marginBottom: 14,
+    }}>
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: 4,
+        background: `linear-gradient(90deg, ${color}, ${meta.accent || color})`,
+      }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, marginTop: 4 }}>
+        <TeamBadge abbr={abbr} size={52} />
+        <div>
+          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 1, color, lineHeight: 1 }}>
+            {meta.name}
+          </div>
+          <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 12, color: "#8B7355", marginTop: 2 }}>
+            Latest News
+          </div>
+        </div>
+      </div>
+      {loading && (
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, color: "#8B7355", padding: "8px 0" }}>
+          Loading news…
+        </div>
+      )}
+      {!loading && news.length === 0 && (
+        <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, color: "#8B7355", padding: "8px 0" }}>
+          No recent news available
+        </div>
+      )}
+      {!loading && news.map((a, i) => <NewsItem key={i} article={a} />)}
+    </div>
+  );
+}
 
 export default function MyTeamsTab() {
+  const [news,    setNews]    = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchNews() {
+      setLoading(true);
+      try {
+        const res  = await fetch("/api/news");
+        if (!res.ok) throw new Error(`News API ${res.status}`);
+        const data = await res.json();
+        setNews(data.teams || {});
+      } catch (e) {
+        console.warn("News fetch failed:", e.message);
+      }
+      setLoading(false);
+    }
+    fetchNews();
+  }, []);
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {Object.entries(TEAM_META).map(([abbr, meta]) => {
-        const ctx = TEAM_CONTEXT[abbr];
-        return (
-          <div key={abbr} className="glass" style={{
-            borderRadius: 14, padding: 16, overflow: "hidden", position: "relative",
-            border: `1.5px solid ${meta.color}50`,
-            boxShadow: `0 0 24px ${meta.color}20`,
-          }}>
-            {/* Top accent bar */}
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4,
-              background: `linear-gradient(90deg, ${meta.color}, ${meta.accent || meta.color})` }} />
-
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, marginTop: 4 }}>
-              <TeamBadge abbr={abbr} size={52} />
-              <div>
-                <div style={{
-                  fontFamily: "'Bebas Neue', sans-serif", fontSize: 25, letterSpacing: 1,
-                  color: meta.color, lineHeight: 1,
-                }}>
-                  {meta.name}
-                </div>
-                <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, fontWeight: 700, color: ctx.statusColor, marginTop: 2 }}>
-                  {ctx.status}
-                </div>
-              </div>
-            </div>
-
-            {/* Stat grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-              {ctx.stats.map(s => (
-                <div key={s.label} style={{
-                  background: "rgba(200,137,58,0.12)", borderRadius: 8, padding: "8px 10px",
-                  border: "1px solid rgba(200,137,58,0.2)"
-                }}>
-                  <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 10, color: "#8B7355", letterSpacing: 1.5, textTransform: "uppercase" }}>{s.label}</div>
-                  <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 21, color: meta.color, marginTop: 2, letterSpacing: 0.5 }}>{s.val}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Summary */}
-            <div style={{
-              fontSize: 15, color: "#3D2B10", lineHeight: 1.6,
-              background: "rgba(200,137,58,0.08)", borderRadius: 8, padding: "10px 12px",
-              border: "1px solid rgba(200,137,58,0.15)"
-            }}>
-              {ctx.summary}
-            </div>
-          </div>
-        );
-      })}
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {Object.keys(TEAM_META).map(abbr => (
+        <TeamCard key={abbr} abbr={abbr} news={news[abbr] || []} loading={loading} />
+      ))}
     </div>
   );
 }
