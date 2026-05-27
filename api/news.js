@@ -4,9 +4,9 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate");
 
   const TEAMS = {
-    CHI: { name: "Chicago Bulls",      espnId: "chi" },
-    LAL: { name: "Los Angeles Lakers", espnId: "lal" },
-    DEN: { name: "Denver Nuggets",     espnId: "den" },
+    CHI: { espnId: "4" },
+    LAL: { espnId: "13" },
+    DEN: { espnId: "7" },
   };
 
   const headers = {
@@ -19,7 +19,8 @@ export default async function handler(req, res) {
 
     for (const [abbr, team] of Object.entries(TEAMS)) {
       try {
-        const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${team.espnId}/news?limit=5`;
+        // Correct ESPN endpoint using numeric team ID
+        const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/news?team=${team.espnId}&limit=5`;
         const r = await fetch(url, { headers });
         if (!r.ok) throw new Error(`ESPN ${r.status}`);
         const data = await r.json();
@@ -28,7 +29,7 @@ export default async function handler(req, res) {
           headline:    a.headline    || "",
           description: a.description || "",
           published:   a.published   || "",
-          link:        a.links?.web?.href || "",
+          link:        a.links?.web?.href || a.links?.api?.href || "",
         }));
       } catch {
         results[abbr] = [];
