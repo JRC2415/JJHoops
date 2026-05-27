@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import TeamBadge from '../components/TeamBadge.jsx';
 import { MY_TEAMS, TEAM_COLORS } from '../constants.js';
 
-// ── Seed data from live standings we just pulled ─────────────────────────────
 const SEED_EAST = [
   { rank:  1, team: "DET", name: "Detroit Pistons",        w: 60, l: 22, pct: 0.732 },
   { rank:  2, team: "BOS", name: "Boston Celtics",         w: 56, l: 26, pct: 0.683 },
@@ -40,11 +39,9 @@ const SEED_WEST = [
 ];
 
 function StandingsTable({ rows, seasonType }) {
-  const isOffseason = seasonType === "offseason" || seasonType === "summer";
-
+  const isOffseason = seasonType === "offseason" || seasonType === "summer" || seasonType === "playoffs";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      {/* Header */}
       <div style={{
         display: "flex", alignItems: "center", gap: 10, padding: "4px 12px",
         fontFamily: "'Barlow Condensed', sans-serif", fontSize: 11,
@@ -66,7 +63,7 @@ function StandingsTable({ rows, seasonType }) {
         const isPlayInLine  = !isOffseason && i === 9;
 
         return (
-          <div key={row.team}>
+          <div key={row.team || i}>
             {isPlayoffLine && (
               <div style={{ height: 1, background: "#16a34a40", margin: "4px 0", position: "relative" }}>
                 <span style={{ position: "absolute", right: 0, top: -8, fontFamily: "'Barlow Condensed', sans-serif", fontSize: 8, color: "#16a34a", letterSpacing: 1 }}>PLAY-IN →</span>
@@ -105,18 +102,21 @@ export default function StandingsTab() {
   const [east,        setEast]        = useState(SEED_EAST);
   const [west,        setWest]        = useState(SEED_WEST);
   const [seasonLabel, setSeasonLabel] = useState("2025–26 Final Regular Season");
-  const [seasonType,  setSeasonType]  = useState("regular");
+  const [seasonType,  setSeasonType]  = useState("playoffs");
   const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
     fetch("/api/standings")
       .then(r => r.json())
       .then(data => {
-        if (data.east?.length) setEast(data.east);
-        if (data.west?.length) setWest(data.west);
-
-        // Label changes based on season type
-        const type = data.seasonType || 2;
+        // Only update if API returned real data with wins/losses
+        const hasRealData = data.east?.some(t => t.w > 0 || t.l > 0);
+        if (hasRealData) {
+          if (data.east?.length) setEast(data.east);
+          if (data.west?.length) setWest(data.west);
+        }
+        // Always update the label
+        const type = data.seasonType || 3;
         if (type === 1) {
           setSeasonLabel("Preseason");
           setSeasonType("preseason");
@@ -124,7 +124,7 @@ export default function StandingsTab() {
           setSeasonLabel(`${data.season || "2025–26"} Regular Season`);
           setSeasonType("regular");
         } else if (type === 3) {
-          setSeasonLabel(`${data.season || "2025–26"} Playoffs`);
+          setSeasonLabel("2025–26 Final Regular Season");
           setSeasonType("playoffs");
         } else {
           setSeasonLabel("Summer League");
@@ -141,7 +141,6 @@ export default function StandingsTab() {
         {seasonLabel} Standings
       </div>
 
-      {/* Conference toggle */}
       <div className="glass" style={{ display: "flex", borderRadius: 10, overflow: "hidden", padding: 3, gap: 3 }}>
         {["east", "west"].map(c => (
           <button key={c} onClick={() => setConf(c)} style={{
