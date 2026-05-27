@@ -9,14 +9,27 @@ export default async function handler(req, res) {
   };
 
   try {
-    // Fetch postseason scoreboard with a large limit to get all series games
-    const r = await fetch(
-      "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?seasontype=3&limit=50&dates=20260401-20260630",
-      { headers }
-    );
-    if (!r.ok) throw new Error(`ESPN ${r.status}`);
-    const data = await r.json();
-    res.status(200).json({ scoreboard: data, fetchedAt: new Date().toISOString(), source: "espn-scoreboard" });
+    // Fetch all postseason games across the full playoff window
+    const urls = [
+      "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?seasontype=3&limit=100&dates=20260415-20260501",
+      "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?seasontype=3&limit=100&dates=20260501-20260630",
+    ];
+
+    const allEvents = [];
+    for (const url of urls) {
+      try {
+        const r = await fetch(url, { headers });
+        if (!r.ok) continue;
+        const d = await r.json();
+        allEvents.push(...(d.events || []));
+      } catch {}
+    }
+
+    res.status(200).json({
+      scoreboard: { events: allEvents },
+      fetchedAt: new Date().toISOString(),
+      source: "espn-scoreboard"
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
