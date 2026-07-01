@@ -75,4 +75,50 @@ export const WEST_STANDINGS = [
   { rank: 13, team: "NOP", name: "New Orleans Pelicans",   w: 25, l: 57 },
   { rank: 14, team: "UTA", name: "Utah Jazz",              w: 21, l: 61 },
   { rank: 15, team: "LAC", name: "LA Clippers",            w: 19, l: 63 },
+];// ── NBA Summer League 2026 ───────────────────────────────────────────────────
+export const SUMMER_LEAGUE_START = new Date("2026-07-09T00:00:00-03:00");
+
+// Bulls summer league schedule — ARG times (CT + 2hrs)
+// To add scores after each game: add bullsScore and oppScore fields
+export const BULLS_SUMMER_GAMES = [
+  {
+    id: "sl1",
+    date: "2026-07-10",
+    opponent: "Memphis Grizzlies",
+    oppAbbr: "MEM",
+    location: "at Memphis",
+    isHome: false,
+    timeArg: "9:00 PM",
+    timeCT: "7:00 PM CT",
+  },
+  {
+    id: "sl2",
+    date: "2026-07-13",
+    opponent: "Utah Jazz",
+    oppAbbr: "UTA",
+    location: "at Utah",
+    isHome: false,
+    timeArg: "10:00 PM",
+    timeCT: "8:00 PM CT",
+  },
+  {
+    id: "sl3",
+    date: "2026-07-14",
+    opponent: "Washington Wizards",
+    oppAbbr: "WAS",
+    location: "vs Washington",
+    isHome: true,
+    timeArg: "9:00 PM",
+    timeCT: "7:00 PM CT",
+  },
+  {
+    id: "sl4",
+    date: "2026-07-16",
+    opponent: "Los Angeles Lakers",
+    oppAbbr: "LAL",
+    location: "vs Lakers",
+    isHome: true,
+    timeArg: "7:00 PM",
+    timeCT: "5:00 PM CT",
+  },
 ];
