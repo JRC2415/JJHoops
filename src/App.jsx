@@ -4,7 +4,7 @@ import MyTeamsTab   from "./tabs/MyTeamsTab.jsx";
 import BracketTab   from "./tabs/BracketTab.jsx";
 import StandingsTab from "./tabs/StandingsTab.jsx";
 import { useLiveGames } from "./hooks/useLiveGames.js";
-import { TEAM_META, NBA_DRAFT_LOTTERY, NBA_DRAFT } from "./constants.js";
+import { TEAM_META, NBA_DRAFT_LOTTERY, NBA_DRAFT, SUMMER_LEAGUE_START } from "./constants.js";
 
 const SEED_GAMES = [];
 
@@ -152,8 +152,8 @@ export default function App() {
               ))}
             </div>
 
-            <CountdownBadge label="Lottery" targetDate={NBA_DRAFT_LOTTERY} color="#E8621A" />
-            <CountdownBadge label="Draft"   targetDate={NBA_DRAFT}          color="#FDB927" />
+<CountdownBadge label="Summer League" targetDate={SUMMER_LEAGUE_START} color="#FFB800" />
+<CountdownBadge label="Draft"   targetDate={NBA_DRAFT}          color="#FDB927" />
 
             <button onClick={refresh} disabled={loading} style={{
               background: "rgba(200,137,58,0.18)", border: "1.5px solid rgba(200,137,58,0.4)",
